@@ -1,0 +1,60 @@
+[Unit]
+Description=Tremor Detector Acquisition Service (ADXL345)
+# Don't start until the network and time sync are up.
+# Time sync matters for FDA-compliant UTC timestamps.
+After=network.target time-sync.target
+Wants=time-sync.target
+
+[Service]
+# --- Identity ---
+# Run as a dedicated low-privilege user, not root.
+# Create with: sudo useradd -r -s /sbin/nologin tremor_svc
+# Grant I2C access with: sudo usermod -aG i2c tremor_svc
+User=tremor_svc
+Group=i2c
+
+# --- Environment ---
+WorkingDirectory=/opt/tremor_detector
+Environment="PYTHONUNBUFFERED=1"
+# Load the HMAC log-signing key from a protected file at startup.
+# File should be root:tremor_svc 640, containing just the key string.
+EnvironmentFile=/etc/tremor_detector/secrets.env
+
+# --- Execution ---
+ExecStart=/opt/tremor_detector/venv/bin/python acquisition_no_int.py
+
+# --- Shutdown behaviour ---
+# On stop/reboot, systemd sends SIGTERM first. The Python process catches
+# this via the signal handler (see acquisition_no_int.py) and writes a
+# DEVICE_SHUTDOWN log entry before exiting cleanly.
+# If it doesn't exit within 15 seconds, systemd sends SIGKILL.
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+# --- Restart policy ---
+# Restart on any unexpected exit (crash, I2C failure, OOM).
+# Don't restart on clean exit (code 0) or SIGTERM — those are intentional.
+Restart=on-failure
+RestartSec=5
+# Give up restarting after 5 failures in 2 minutes (prevents boot loop).
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+# --- Hardening (reduces attack surface per FDA cybersecurity guidance) ---
+# Prevent the service from gaining new privileges via setuid binaries.
+NoNewPrivileges=true
+# Give the service its own /tmp, invisible to other processes.
+PrivateTmp=true
+# Make most of the filesystem read-only; only /opt and /var/log are writable.
+ProtectSystem=strict
+ReadWritePaths=/var/log/tremor_detector /opt/tremor_detector
+# Hide /home directories from the service.
+ProtectHome=true
+# Prevent writing to kernel tunables.
+ProtectKernelTunables=true
+# Prevent loading kernel modules.
+ProtectKernelModules=true
+
+[Install]
+# Start automatically in the default multi-user boot target.
+WantedBy=multi-user.target

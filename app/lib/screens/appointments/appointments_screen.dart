@@ -1,0 +1,17 @@
+import 'package:flutter/material.dart';
+
+class AppointmentsScreen extends StatelessWidget {
+  const AppointmentsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text(
+          'Appointments coming soon',
+          style: TextStyle(fontSize: 18, color: Colors.grey),
+        ),
+      ),
+    );
+  }
+}
